@@ -79,4 +79,32 @@ describe("인증과 댓글", () => {
         confirmPassword: "password2",
       }).success,
     ).toBe(false));
+  it("이메일 30자 초과 시 거부", () =>
+    expect(
+      signupSchema.safeParse({
+        name: "김철수",
+        nickname: "철수",
+        email: "verylongemailaddress12345678@example.com",
+        phone: "01012345678",
+        birthDate: "1990-01-01",
+        gender: "M",
+        club: "",
+        password: "password1",
+        confirmPassword: "password1",
+      }).success,
+    ).toBe(false));
+  it("닉네임 20자 초과 시 거부", () =>
+    expect(
+      signupSchema.safeParse({
+        name: "김철수",
+        nickname: "일이삼사오육칠팔구십일이삼사오육칠팔구십일",
+        email: "test@test.com",
+        phone: "01012345678",
+        birthDate: "1990-01-01",
+        gender: "M",
+        club: "",
+        password: "password1",
+        confirmPassword: "password1",
+      }).success,
+    ).toBe(false));
 });

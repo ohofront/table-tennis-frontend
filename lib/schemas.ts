@@ -52,9 +52,18 @@ export const loginSchema = z.object({
   password: z.string().min(1, "비밀번호를 입력해주세요."),
 });
 export const profileSchema = z.object({
-  name: z.string().min(1, "실명을 입력해주세요."),
-  nickname: z.string().min(2, "닉네임은 2자 이상입니다."),
-  email: z.string().email("이메일을 확인해주세요."),
+  name: z
+    .string()
+    .min(1, "실명을 입력해주세요.")
+    .max(30, "실명은 30자 이내로 입력해주세요."),
+  nickname: z
+    .string()
+    .min(2, "닉네임은 2자 이상입니다.")
+    .max(20, "닉네임은 20자 이내로 입력해주세요."),
+  email: z
+    .string()
+    .email("이메일을 확인해주세요.")
+    .max(30, "이메일은 30자 이내로 입력해주세요."),
   phone: z.string().regex(/^[0-9+\- ]{9,20}$/, "연락처를 확인해주세요."),
   birthDate: z
     .string()
@@ -64,7 +73,7 @@ export const profileSchema = z.object({
       "유효한 생년월일을 입력해주세요.",
     ),
   gender: z.enum(["M", "F"]),
-  club: z.string().max(100),
+  club: z.string().max(50, "소속 클럽은 50자 이내로 입력해주세요."),
 });
 export const signupSchema = profileSchema
   .extend({
