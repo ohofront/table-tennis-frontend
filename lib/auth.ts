@@ -2,6 +2,18 @@ import { api } from "./api";
 import { parseJwt, type JwtPayload } from "./jwt";
 import type { LoginResponseData, Player, Role, Session } from "./types";
 
+import {
+  clearStoredRefreshToken,
+  getStoredRefreshToken,
+  setStoredRefreshToken,
+} from "./token";
+
+export {
+  clearStoredRefreshToken,
+  getStoredRefreshToken,
+  setStoredRefreshToken,
+};
+
 export interface LoginResult {
   data?: LoginResponseData;
   accessToken?: string;
@@ -80,8 +92,8 @@ export async function processLoginResponse(
     user,
   };
 
-  if (typeof document !== "undefined" && refreshToken) {
-    document.cookie = `refreshToken=${encodeURIComponent(refreshToken)}; path=/; max-age=604800; SameSite=Lax`;
+  if (refreshToken) {
+    setStoredRefreshToken(refreshToken);
   }
 
   return session;
