@@ -87,6 +87,96 @@ describe("새로운 백엔드 응답 구조 기반 세션 복구 및 리프레�
     expect(session?.user.name).toBe("탁구왕");
     expect(session?.user.role).toBe("ADMIN");
   });
+
+  it("새로고침 시 쿠키에 저장된 refreshToken을 JSON Body로 전송하고 새 토큰을 쿠키에 갱신한다", async () => {
+    let cookieStore = "refreshToken=stored-initial-token";
+    const fakeDocument = {
+      get cookie() {
+        return cookieStore;
+      },
+      set cookie(val: string) {
+        cookieStore = val;
+      },
+    };
+    vi.stubGlobal("document", fakeDocument);
+
+    const payload = { sub: "user-refresh-test", role: "USER" };
+    const base64Url = Buffer.from(JSON.stringify(payload))
+      .toString("base64")
+      .replace(/=/g, "")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_");
+    const accessToken = `header.${base64Url}.signature`;
+
+    const backendRefreshResponse = {
+      success: true,
+      data: {
+        accessToken,
+        refreshToken: "rotated-new-token",
+      },
+    };
+
+    const userProfileResponse = {
+      success: true,
+      data: {
+        userId: "user-refresh-test",
+        userName: "핑퐁러버",
+        realName: "김새로고침",
+      },
+    };
+
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(response(backendRefreshResponse))
+      .mockResolvedValueOnce(response(userProfileResponse));
+    vi.stubGlobal("fetch", fetch);
+
+    const session = await refreshSession();
+
+    // 1. 요청 바디에 저장되어 있던 refreshToken이 포함되었는지 확인
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/v1/auth/refresh"),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({ refreshToken: "stored-initial-token" }),
+      }),
+    );
+
+    // 2. 세션이 정상 복구되었는지 확인
+    expect(session?.accessToken).toBe(accessToken);
+    expect(session?.refreshToken).toBe("rotated-new-token");
+    expect(session?.user.name).toBe("김새로고침");
+
+    // 3. 새 리프레시 토큰이 쿠키에 갱신되었는지 확인
+    expect(cookieStore).toContain("refreshToken=rotated-new-token");
+  });
+
+  it("refresh 실패 시 쿠키가 정리되고 세션이 null이 된다", async () => {
+    let cookieStore = "refreshToken=invalid-token";
+    const fakeDocument = {
+      get cookie() {
+        return cookieStore;
+      },
+      set cookie(val: string) {
+        cookieStore = val;
+      },
+    };
+    vi.stubGlobal("document", fakeDocument);
+
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(response({ message: "토큰 만료" }, 401));
+    vi.stubGlobal("fetch", fetch);
+
+    const session = await refreshSession();
+    expect(session).toBeNull();
+    expect(useAuth.getState().session).toBeNull();
+    // max-age=0이 포함되어 쿠키가 삭제되었는지 확인
+    expect(cookieStore).toContain("max-age=0");
+  });
 });
 
 describe("processLoginResponse (실제 백엔드 로그인 응답 파싱 및 세션 생성)", () => {
@@ -191,5 +281,64 @@ describe("processLoginResponse (실제 백엔드 로그인 응답 파싱 및 세
     expect(session.user.userId).toBe("user-legacy");
     expect(session.user.role).toBe("ADMIN");
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("토큰 스토리지 유틸리티 (lib/token)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("쿠키에서 refreshToken을 읽고, 쓰고, 삭제할 수 있다", async () => {
+    const {
+      getStoredRefreshToken,
+      setStoredRefreshToken,
+      clearStoredRefreshToken,
+    } = await import("@/lib/token");
+
+    let cookieStore = "";
+    const fakeDocument = {
+      get cookie() {
+        return cookieStore;
+      },
+      set cookie(val: string) {
+        cookieStore = val;
+      },
+    };
+    vi.stubGlobal("document", fakeDocument);
+
+    expect(getStoredRefreshToken()).toBeNull();
+
+    setStoredRefreshToken("my-secret-refresh-token");
+    expect(cookieStore).toContain("refreshToken=my-secret-refresh-token");
+    expect(getStoredRefreshToken()).toBe("my-secret-refresh-token");
+
+    clearStoredRefreshToken();
+    expect(cookieStore).toContain("max-age=0");
+  });
+
+  it("쿠키가 없고 localStorage에 있는 경우 fallback으로 읽을 수 있다", async () => {
+    const { getStoredRefreshToken, REFRESH_STORAGE_KEY } = await import(
+      "@/lib/token"
+    );
+
+    const store: Record<string, string> = {
+      [REFRESH_STORAGE_KEY]: "fallback-token-from-storage",
+    };
+    const fakeDocument = { cookie: "" };
+    const fakeLocalStorage = {
+      getItem: (key: string) => store[key] ?? null,
+      setItem: (key: string, val: string) => {
+        store[key] = val;
+      },
+      removeItem: (key: string) => {
+        delete store[key];
+      },
+    };
+
+    vi.stubGlobal("document", fakeDocument);
+    vi.stubGlobal("localStorage", fakeLocalStorage);
+
+    expect(getStoredRefreshToken()).toBe("fallback-token-from-storage");
   });
 });
