@@ -1,6 +1,12 @@
 import { useAuth } from "@/store/auth";
 import type { LoginResponseData, Player, Role, Session } from "./types";
 import { parseJwt, type JwtPayload } from "./jwt";
+import {
+  clearStoredRefreshToken,
+  getStoredRefreshToken,
+  setStoredRefreshToken,
+} from "./token";
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -37,12 +43,23 @@ async function decode<T>(response: Response): Promise<T> {
       : body
   ) as T;
 }
+
 export function refreshSession() {
   if (!refreshing) {
     const previous = useAuth.getState().session;
+    const tokenToRefresh = previous?.refreshToken ?? getStoredRefreshToken();
+
+    const headers: Record<string, string> = {
+      ...(tokenToRefresh ? { "Content-Type": "application/json" } : {}),
+    };
+
     refreshing = fetch(`${origin}/api/v1/auth/refresh`, {
       method: "POST",
       credentials: "include",
+      headers,
+      ...(tokenToRefresh
+        ? { body: JSON.stringify({ refreshToken: tokenToRefresh }) }
+        : {}),
     })
       .then(decode<LoginResponseData | Session>)
       .then(async (result) => {
@@ -102,17 +119,25 @@ export function refreshSession() {
 
         if (!user) throw new Error("인증 응답을 확인해주세요.");
 
+        const nextRefreshToken =
+          raw.refreshToken ?? tokenToRefresh ?? previous?.refreshToken;
+
         const session: Session = {
           accessToken,
-          refreshToken: raw.refreshToken ?? previous?.refreshToken,
+          refreshToken: nextRefreshToken,
           user,
         };
+
+        if (nextRefreshToken) {
+          setStoredRefreshToken(nextRefreshToken);
+        }
 
         if (useAuth.getState().session === previous)
           useAuth.getState().setSession(session);
         return useAuth.getState().session;
       })
       .catch(() => {
+        clearStoredRefreshToken();
         if (useAuth.getState().session === previous)
           useAuth.getState().setSession(null);
         return useAuth.getState().session;
