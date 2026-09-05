@@ -13,6 +13,22 @@ import { AdminOnly } from "@/components/common/AdminOnly";
 import { RankingChart } from "@/components/ranking/RankingChart";
 import { date, names } from "@/lib/format";
 import { StatusBadge } from "@/components/common/StatusBadge";
+function normalizePlayer(
+  raw: Partial<Player> & { realName?: string; userName?: string; clubName?: string },
+): Player {
+  return {
+    ...raw,
+    userId: String(raw.userId ?? ""),
+    name: raw.name || raw.realName || raw.userName || "선수",
+    nickname: raw.nickname || raw.userName || "",
+    club: raw.club || raw.clubName || "",
+    gender: raw.gender || "M",
+    totalMatches: raw.totalMatches ?? 0,
+    winRate: raw.winRate ?? 0,
+    profileImageUrl: raw.profileImageUrl,
+  };
+}
+
 const columns: Column<Player>[] = [
   {
     key: "name",
@@ -31,9 +47,20 @@ const columns: Column<Player>[] = [
   {
     key: "winRate",
     label: "승률",
-    render: (p) => <strong className="green">{p.winRate}%</strong>,
+    render: (p) => (
+      <strong className="green">
+        {p.winRate !== undefined && p.winRate !== null ? `${p.winRate}%` : "-"}
+      </strong>
+    ),
   },
-  { key: "matches", label: "총 경기", render: (p) => `${p.totalMatches}경기` },
+  {
+    key: "matches",
+    label: "총 경기",
+    render: (p) =>
+      p.totalMatches !== undefined && p.totalMatches !== null
+        ? `${p.totalMatches}경기`
+        : "-",
+  },
   {
     key: "detail",
     label: "관리",
@@ -53,7 +80,7 @@ export function Players() {
   const [keyword, setKeyword] = useState("");
   const [club, setClub] = useState("");
   const [gender, setGender] = useState("");
-  const [sort, setSort] = useState("winRate,desc");
+  const [sort, setSort] = useState("reg_date,desc");
   const search = useDebounce(keyword);
   const clubSearch = useDebounce(club);
   const players = useList<Player>(
@@ -101,9 +128,10 @@ export function Players() {
             value={sort}
             onChange={(e) => setSort(e.target.value)}
           >
-            <option value="winRate,desc">승률순</option>
-            <option value="totalMatches,desc">경기수순</option>
-            <option value="createdAt,desc">최근등록순</option>
+            <option value="reg_date,desc">최근등록순</option>
+            <option value="reg_date,asc">오래된순</option>
+            <option value="realName,asc">이름순</option>
+            <option value="userName,asc">닉네임순</option>
           </select>
         </div>
         <QueryState
@@ -113,7 +141,7 @@ export function Players() {
         >
           <DataTable
             columns={columns}
-            rows={players.data ?? []}
+            rows={(players.data ?? []).map(normalizePlayer)}
             rowKey={(p) => p.userId}
           />
         </QueryState>
@@ -125,6 +153,7 @@ export function PlayerDetail({ userId }: { userId: string }) {
   const player = useApi<Player>(`/users/${userId}`);
   const stats = useApi<PlayerStats>(`/players/${userId}/stats`);
   const matches = useList<Match>(`/players/${userId}/matches`);
+  const playerData = player.data ? normalizePlayer(player.data) : null;
   return (
     <>
       <div className="page-heading">
@@ -143,21 +172,21 @@ export function PlayerDetail({ userId }: { userId: string }) {
         error={player.error}
         retry={() => player.refetch()}
       >
-        {player.data && (
+        {playerData && (
           <section className="panel profile">
-            <PlayerAvatar player={player.data} large />
+            <PlayerAvatar player={playerData} large />
             <div>
               <h2>
-                {player.data.name} <small>{player.data.nickname}</small>
+                {playerData.name} <small>{playerData.nickname}</small>
               </h2>
               <p>
-                {player.data.club || "무소속"} ·{" "}
-                {player.data.gender === "M" ? "남성" : "여성"}
+                {playerData.club || "무소속"} ·{" "}
+                {playerData.gender === "M" ? "남성" : "여성"}
               </p>
-              <p>생년월일: {player.data.birthDate || "미등록"}</p>
+              <p>생년월일: {playerData.birthDate || "미등록"}</p>
               <p>
-                오픈부수: {player.data.openDivision || "미등록"} · 지역부수:{" "}
-                {player.data.localDivision || "미등록"}
+                오픈부수: {playerData.openDivision || "미등록"} · 지역부수:{" "}
+                {playerData.localDivision || "미등록"}
               </p>
             </div>
           </section>
