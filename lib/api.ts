@@ -1,5 +1,6 @@
 import { useAuth } from "@/store/auth";
-import type { Session } from "./types";
+import type { LoginResponseData, Player, Role, Session } from "./types";
+import { parseJwt, type JwtPayload } from "./jwt";
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -43,10 +44,52 @@ export function refreshSession() {
       method: "POST",
       credentials: "include",
     })
-      .then(decode<Session>)
-      .then((session) => {
-        if (!session?.accessToken || !session.user)
-          throw new Error("인증 응답을 확인해주세요.");
+      .then(decode<LoginResponseData | Session>)
+      .then(async (result) => {
+        const raw =
+          (result as { data?: LoginResponseData })?.data ??
+          (result as LoginResponseData);
+        const accessToken = raw?.accessToken;
+        if (!accessToken) throw new Error("인증 응답을 확인해주세요.");
+
+        let user: (Player & { role: Role }) | undefined =
+          (raw as Session).user ?? previous?.user;
+
+        if (!user) {
+          const payload = parseJwt<JwtPayload>(accessToken);
+          const userId = payload?.sub;
+          const role: Role = payload?.role === "ADMIN" ? "ADMIN" : "USER";
+          if (userId) {
+            try {
+              const player = await api<Player & { role?: Role }>(
+                `/users/${userId}`,
+                { headers: { Authorization: `Bearer ${accessToken}` } },
+                false,
+              );
+              user = { ...player, role: player.role || role };
+            } catch {
+              user = {
+                userId,
+                name: payload?.name || "사용자",
+                nickname: payload?.nickname || "사용자",
+                club: "",
+                gender: "M",
+                totalMatches: 0,
+                winRate: 0,
+                role,
+              };
+            }
+          }
+        }
+
+        if (!user) throw new Error("인증 응답을 확인해주세요.");
+
+        const session: Session = {
+          accessToken,
+          refreshToken: raw.refreshToken ?? previous?.refreshToken,
+          user,
+        };
+
         if (useAuth.getState().session === previous)
           useAuth.getState().setSession(session);
         return useAuth.getState().session;
