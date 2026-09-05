@@ -24,7 +24,7 @@ export function PlayerAvatar({
           style={{ width: size, height: size }}
         />
       ) : (
-        player.name.slice(0, 1)
+        player.name ? player.name.slice(0, 1) : "?"
       )}
     </span>
   );
