@@ -40,8 +40,23 @@ export async function processLoginResponse(
       const player = await api<Player & { role?: Role }>(`/users/${userId}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
+      const rawUser = player as unknown as Record<string, unknown>;
       user = {
         ...player,
+        userId: String(rawUser.userId ?? userId),
+        name:
+          (rawUser.realName as string) ||
+          player.name ||
+          payload?.name ||
+          "사용자",
+        nickname:
+          (rawUser.userName as string) ||
+          player.nickname ||
+          payload?.nickname ||
+          "사용자",
+        club: (rawUser.clubName as string) || player.club || "",
+        phone: (rawUser.phoneNumber as string) || player.phone || "",
+        gender: (rawUser.gender as "M" | "F") || player.gender || "M",
         role: player.role || role,
       };
     } catch (err) {

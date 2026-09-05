@@ -66,7 +66,25 @@ export function refreshSession() {
                 { headers: { Authorization: `Bearer ${accessToken}` } },
                 false,
               );
-              user = { ...player, role: player.role || role };
+              const rawPlayer = player as unknown as Record<string, unknown>;
+              user = {
+                ...player,
+                userId: String(rawPlayer.userId ?? userId),
+                name:
+                  (rawPlayer.realName as string) ||
+                  player.name ||
+                  payload?.name ||
+                  "사용자",
+                nickname:
+                  (rawPlayer.userName as string) ||
+                  player.nickname ||
+                  payload?.nickname ||
+                  "사용자",
+                club: (rawPlayer.clubName as string) || player.club || "",
+                phone: (rawPlayer.phoneNumber as string) || player.phone || "",
+                gender: (rawPlayer.gender as "M" | "F") || player.gender || "M",
+                role: player.role || role,
+              };
             } catch {
               user = {
                 userId,
