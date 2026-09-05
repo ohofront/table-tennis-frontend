@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/store/auth";
 import { api, json } from "@/lib/api";
+import { clearStoredRefreshToken } from "@/lib/token";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 const navigation = [
@@ -33,12 +34,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
     setBusy(true);
     setError("");
     try {
-      await api("/auth/logout", json("POST"));
-      useAuth.getState().setSession(null);
-      client.clear();
+      await api("/auth/logout", json("POST")).catch(() => {});
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      clearStoredRefreshToken();
+      useAuth.getState().setSession(null);
+      client.clear();
       setBusy(false);
     }
   }
