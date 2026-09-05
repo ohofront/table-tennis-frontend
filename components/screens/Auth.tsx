@@ -9,8 +9,9 @@ import { loginSchema, profileSchema, signupSchema } from "@/lib/schemas";
 import { Field, MutationError, applyErrors } from "@/components/common/Forms";
 import { QueryState } from "@/components/common/QueryState";
 import { useApi, useList, useWrite } from "@/hooks/useApi";
+import { processLoginResponse, type LoginResult } from "@/lib/auth";
 import { useAuth } from "@/store/auth";
-import type { Match, Player, Session, Tournament } from "@/lib/types";
+import type { Match, Player, Tournament } from "@/lib/types";
 import { safeNext, date, names } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
 export function Login() {
@@ -19,7 +20,9 @@ export function Login() {
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
   });
-  const write = useWrite<Session, z.infer<typeof loginSchema>>("/auth/login");
+  const write = useWrite<LoginResult, z.infer<typeof loginSchema>>(
+    "/auth/login",
+  );
   return (
     <div className="auth-wrap">
       <p className="eyebrow">WELCOME BACK</p>
@@ -29,13 +32,8 @@ export function Login() {
         className="panel form-panel"
         onSubmit={form.handleSubmit(async (values) => {
           try {
-            const session = await write.mutateAsync(values);
-            if (!session?.accessToken || !session.user) {
-              form.setError("root", {
-                message: "로그인 응답 형식을 확인해주세요.",
-              });
-              return;
-            }
+            const res = await write.mutateAsync(values);
+            const session = await processLoginResponse(res);
             client.clear();
             useAuth.getState().setSession(session);
             router.replace(
