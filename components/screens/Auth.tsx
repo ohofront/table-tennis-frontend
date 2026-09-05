@@ -14,6 +14,7 @@ import { useAuth } from "@/store/auth";
 import type { Match, Player, Tournament } from "@/lib/types";
 import { safeNext, date, names } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
+import { api, json } from "@/lib/api";
 export function Login() {
   const router = useRouter();
   const client = useQueryClient();
@@ -78,6 +79,25 @@ export function Login() {
     </div>
   );
 }
+
+function toUserUpdateRequest(values: {
+  name: string;
+  nickname: string;
+  phone?: string;
+  birthDate?: string;
+  gender?: "M" | "F";
+  club?: string;
+}) {
+  return {
+    realName: values.name,
+    userName: values.nickname,
+    ...(values.phone ? { phoneNumber: values.phone } : {}),
+    ...(values.birthDate ? { birthDate: values.birthDate } : {}),
+    ...(values.gender ? { gender: values.gender } : {}),
+    ...(values.club !== undefined ? { clubName: values.club } : {}),
+  };
+}
+
 const fields = [
   { name: "name", label: "실명", type: "text" },
   { name: "nickname", label: "닉네임", type: "text" },
@@ -88,11 +108,13 @@ const fields = [
 ] as const;
 export function Signup({ admin = false }: { admin?: boolean }) {
   const router = useRouter();
+  const client = useQueryClient();
+  const [isPending, setIsPending] = useState(false);
+  const [submitError, setSubmitError] = useState<Error | null>(null);
   const form = useForm<z.infer<typeof signupSchema>>({
     resolver: zodResolver(signupSchema),
     defaultValues: { gender: "M", club: "" },
   });
-  const write = useWrite<Player, unknown>("/auth/signup");
   return (
     <div className="auth-wrap wide-auth">
       <p className="eyebrow">JOIN THE GAME</p>
@@ -101,13 +123,89 @@ export function Signup({ admin = false }: { admin?: boolean }) {
       <form
         className="panel form-panel"
         onSubmit={form.handleSubmit(async (values) => {
-          const { confirmPassword, ...body } = values;
-          void confirmPassword;
+          setIsPending(true);
+          setSubmitError(null);
           try {
-            await write.mutateAsync(body);
-            router.push(admin ? "/players" : "/login?registered=1");
+            // 1단계: 백엔드 Signup DTO 필수 4개 필드만 전송
+            const signupBody = {
+              email: values.email,
+              password: values.password,
+              userName: values.nickname,
+              realName: values.name,
+            };
+            const signupRes = await api<{
+              userId?: number | string;
+              userName?: string;
+              realName?: string;
+            }>("/auth/signup", json("POST", signupBody));
+
+            const profilePayload = toUserUpdateRequest(values);
+
+            if (admin) {
+              // 관리자 선수 등록: 기존 관리자 세션 유지하며 대상 선수 프로필 추가 저장
+              const targetUserId = signupRes?.userId;
+              if (targetUserId) {
+                try {
+                  await api(
+                    `/users/${targetUserId}`,
+                    json("PUT", profilePayload),
+                  );
+                } catch (putErr) {
+                  console.warn("선수 프로필 추가 저장 실패 (기본 계정은 생성됨):", putErr);
+                }
+              }
+              client.invalidateQueries();
+              router.push("/players");
+            } else {
+              // 일반 회원가입: 로그인 처리 -> PUT /users/{userId} 프로필 저장 (2단계 흐름)
+              try {
+                const loginRes = await api<LoginResult>(
+                  "/auth/login",
+                  json("POST", {
+                    email: values.email,
+                    password: values.password,
+                  }),
+                );
+                const session = await processLoginResponse(loginRes);
+                client.clear();
+                useAuth.getState().setSession(session);
+
+                if (session?.user?.userId) {
+                  try {
+                    await api(
+                      `/users/${session.user.userId}`,
+                      json("PUT", profilePayload),
+                    );
+                    useAuth.getState().setSession({
+                      ...session,
+                      user: {
+                        ...session.user,
+                        name: values.name,
+                        nickname: values.nickname,
+                        phone: values.phone,
+                        birthDate: values.birthDate,
+                        gender: values.gender,
+                        club: values.club,
+                      },
+                    });
+                  } catch (putErr) {
+                    console.warn("프로필 추가 정보 저장 실패 (로그인은 완료됨):", putErr);
+                  }
+                }
+                const next = safeNext(
+                  new URLSearchParams(window.location.search).get("next"),
+                );
+                router.replace(next === "/login" ? "/" : next);
+              } catch (loginErr) {
+                console.error("자동 로그인 처리 실패:", loginErr);
+                router.push("/login?registered=1");
+              }
+            }
           } catch (e) {
+            setSubmitError(e as Error);
             applyErrors(e, form.setError);
+          } finally {
+            setIsPending(false);
           }
         })}
       >
@@ -148,9 +246,9 @@ export function Signup({ admin = false }: { admin?: boolean }) {
             />
           </Field>
         </div>
-        <MutationError error={write.error} />
-        <button className="button full" disabled={write.isPending}>
-          {write.isPending ? "등록 중…" : admin ? "선수 등록" : "가입하기"}
+        <MutationError error={submitError} />
+        <button className="button full" disabled={isPending}>
+          {isPending ? "등록 중…" : admin ? "선수 등록" : "가입하기"}
         </button>
       </form>
     </div>
@@ -182,7 +280,7 @@ function ProfileForm({ player }: { player: Player }) {
       club: player.club ?? "",
     },
   });
-  const write = useWrite<Player, z.infer<typeof profileSchema>>(
+  const write = useWrite<Player, unknown>(
     `/users/${player.userId}`,
     "PUT",
   );
@@ -192,7 +290,8 @@ function ProfileForm({ player }: { player: Player }) {
       onSubmit={form.handleSubmit(async (values) => {
         setSaved(false);
         try {
-          const result = await write.mutateAsync(values);
+          const payload = toUserUpdateRequest(values);
+          const result = await write.mutateAsync(payload);
           const session = useAuth.getState().session;
           if (session?.user.userId === player.userId)
             useAuth
@@ -202,7 +301,7 @@ function ProfileForm({ player }: { player: Player }) {
                 user: {
                   ...session.user,
                   ...values,
-                  ...result,
+                  ...(result as unknown as Record<string, unknown>),
                   role: session.user.role,
                 },
               });
