@@ -17,8 +17,16 @@ export interface Player {
   winRate: number;
   averageScore?: number;
 }
+export interface LoginResponseData {
+  accessToken: string;
+  refreshToken?: string;
+  expiresIn?: number;
+  tokenType?: string;
+  user?: Player & { role: Role };
+}
 export interface Session {
   accessToken: string;
+  refreshToken?: string;
   user: Player & { role: Role };
 }
 export interface MatchSet {
