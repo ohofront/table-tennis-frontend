@@ -1,0 +1,13 @@
+[build]
+  command = "pnpm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "20"
+  PNPM_FLAGS = "--shamefully-hoist"
+
+[[redirects]]
+  from = "/api/v1/*"
+  to = "https://table-tennis-api-production.up.railway.app/api/v1/:splat"
+  status = 200
+  force = true

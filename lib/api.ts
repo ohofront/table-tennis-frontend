@@ -10,7 +10,7 @@ export class ApiError extends Error {
   }
 }
 const origin = (
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? ""
 ).replace(/\/$/, "");
 export function queryString(
   params: Record<string, string | number | undefined>,
