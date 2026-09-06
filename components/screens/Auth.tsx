@@ -94,7 +94,7 @@ function toUserUpdateRequest(values: {
     ...(values.phone ? { phoneNumber: values.phone } : {}),
     ...(values.birthDate ? { birthDate: values.birthDate } : {}),
     ...(values.gender ? { gender: values.gender } : {}),
-    ...(values.club !== undefined ? { clubName: values.club } : {}),
+    ...(values.club ? { clubName: values.club } : {}),
   };
 }
 
