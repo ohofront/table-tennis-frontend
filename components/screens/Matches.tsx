@@ -49,6 +49,14 @@ export function NewMatch() {
   useEffect(() => {
     if (competition.data) setValue("matchFormat", competition.data.matchFormat);
   }, [competition.data, setValue]);
+  const roundMap: Record<string, number> = {
+    예선: 1,
+    본선: 2,
+    "16강": 16,
+    "8강": 8,
+    준결승: 4,
+    결승: 2,
+  };
   async function submit(values: MatchForm) {
     if (
       !competition.data ||
@@ -56,21 +64,33 @@ export function NewMatch() {
     )
       return;
     try {
+      const matchRoundNum =
+        (roundMap[values.matchRound] ?? Number(values.matchRound)) || 1;
       const result = await create.mutateAsync({
-        competitionId: values.competitionId,
-        matchFormat: competition.data.matchFormat,
+        competitionId: Number(values.competitionId),
         participants: [
-          ...values.sideA.map((userId) => ({ userId, side: "A" })),
-          ...values.sideB.map((userId) => ({ userId, side: "B" })),
+          ...values.sideA.map((userId, i) => ({
+            userId: Number(userId),
+            side: "SIDE_A",
+            participantOrder: i + 1,
+          })),
+          ...values.sideB.map((userId, i) => ({
+            userId: Number(userId),
+            side: "SIDE_B",
+            participantOrder: i + 1,
+          })),
         ],
         scheduledAt: new Date(values.scheduledAt).toISOString(),
+        location: values.venue,
         venue: values.venue,
-        matchRound: values.matchRound,
-        courtNumber: values.courtNumber || undefined,
-        notes: values.notes,
+        matchRound: matchRoundNum,
+        courtNumber: values.courtNumber ? Number(values.courtNumber) : undefined,
+        notes: values.notes || undefined,
       });
-      if (!result.matchId) throw new Error("등록 응답에 matchId가 없습니다.");
-      router.push(`/matches/${result.matchId}/sets`);
+      const matchId =
+        result.matchId ?? (result as unknown as Record<string, unknown>).id;
+      if (!matchId) throw new Error("등록 응답에 matchId가 없습니다.");
+      router.push(`/matches/${matchId}/sets`);
     } catch (e) {
       applyErrors(e, form.setError);
       form.setError("root", { message: (e as Error).message });
@@ -253,6 +273,21 @@ function CompetitionInfo({ competition }: { competition: Competition }) {
     </p>
   );
 }
+function normalizeMatchSet(
+  raw: Partial<MatchSet> & {
+    id?: string | number;
+    sideAPoint?: number;
+    sideBPoint?: number;
+  },
+): MatchSet {
+  return {
+    setId: String(raw.setId ?? raw.id ?? ""),
+    setNumber: raw.setNumber ?? 0,
+    sideAScore: raw.sideAPoint ?? raw.sideAScore ?? 0,
+    sideBScore: raw.sideBPoint ?? raw.sideBScore ?? 0,
+  };
+}
+
 export function MatchSets({ matchId }: { matchId: string }) {
   const match = useApi<Match>(`/matches/${matchId}`);
   const sets = useList<MatchSet>(`/matches/${matchId}/sets`);
@@ -274,7 +309,11 @@ export function MatchSets({ matchId }: { matchId: string }) {
         }}
       >
         {match.data && sets.data && (
-          <ScoreEditor key={matchId} match={match.data} sets={sets.data} />
+          <ScoreEditor
+            key={matchId}
+            match={match.data}
+            sets={sets.data.map(normalizeMatchSet)}
+          />
         )}
       </QueryState>
     </>
@@ -327,17 +366,15 @@ function ScoreEditor({ match, sets }: { match: Match; sets: MatchSet[] }) {
         "저장된 세트는 비울 수 없습니다. 점수를 수정해주세요.",
       );
     setBusy(true);
-    const durationSeconds = duration
-      ? duration
-          .split(":")
-          .map(Number)
-          .reduce((sum, n) => sum * 60 + n, 0)
-      : undefined;
     try {
+      const setsPayload = filled.map((s) => ({
+        setNumber: s.setNumber,
+        sideAPoint: s.sideAScore,
+        sideBPoint: s.sideBScore,
+      }));
       if (!sets.length) {
         const result = await write.mutateAsync({
-          sets: filled,
-          durationSeconds,
+          sets: setsPayload,
         });
         setSaved(result);
         if (result.status === "COMPLETED")
@@ -354,17 +391,25 @@ function ScoreEditor({ match, sets }: { match: Match; sets: MatchSet[] }) {
               throw new Error("세트 수정에 필요한 setId가 없습니다.");
             await api(
               `/matches/${match.matchId}/sets/${old.setId}`,
-              json("PUT", set),
+              json("PUT", {
+                setNumber: set.setNumber,
+                sideAPoint: set.sideAScore,
+                sideBPoint: set.sideBScore,
+              }),
             );
           }
         }
-        const added = filled.filter(
-          (s) => !sets.some((old) => old.setNumber === s.setNumber),
-        );
+        const added = filled
+          .filter((s) => !sets.some((old) => old.setNumber === s.setNumber))
+          .map((s) => ({
+            setNumber: s.setNumber,
+            sideAPoint: s.sideAScore,
+            sideBPoint: s.sideBScore,
+          }));
         if (added.length)
           await api(
             `/matches/${match.matchId}/sets`,
-            json("POST", { sets: added, durationSeconds }),
+            json("POST", { sets: added }),
           );
         setSaved(await api<Match>(`/matches/${match.matchId}`));
         await client.invalidateQueries();
@@ -448,7 +493,7 @@ function ScoreEditor({ match, sets }: { match: Match; sets: MatchSet[] }) {
               disabled={finalize.isPending}
               onClick={async () => {
                 try {
-                  await finalize.mutateAsync({});
+                  await finalize.mutateAsync(undefined);
                   router.push(`/matches/${match.matchId}`);
                 } catch {
                   /* mutation error rendered */
@@ -519,8 +564,12 @@ export function MatchDetail({ matchId }: { matchId: string }) {
             <section className="panel match-detail">
               <div className="row-between">
                 <span>
-                  {date(match.data.scheduledAt)} · {match.data.venue} ·{" "}
-                  {match.data.matchRound}
+                  {date(match.data.scheduledAt)} ·{" "}
+                  {match.data.venue ||
+                    (match.data as unknown as Record<string, unknown>)
+                      .location as string ||
+                    ""}{" "}
+                  · {match.data.matchRound}
                 </span>
                 <StatusBadge status={match.data.status} />
               </div>
@@ -556,6 +605,7 @@ export function MatchDetail({ matchId }: { matchId: string }) {
               >
                 <SetScoreGrid
                   rows={(sets.data ?? [])
+                    .map(normalizeMatchSet)
                     .slice()
                     .sort((a, b) => a.setNumber - b.setNumber)
                     .map((s) => ({
