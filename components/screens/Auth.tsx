@@ -268,16 +268,23 @@ export function ProfileEdit({ userId }: { userId: string }) {
 }
 function ProfileForm({ player }: { player: Player }) {
   const [saved, setSaved] = useState(false);
+  const raw = player as unknown as Record<string, unknown>;
+  const normalizedName = (raw.realName as string) || player.name || "";
+  const normalizedNickname = (raw.userName as string) || player.nickname || "";
+  const normalizedClub = (raw.clubName as string) || player.club || "";
+  const normalizedPhone = (raw.phoneNumber as string) || player.phone || "";
+  const normalizedGender =
+    player.gender || (raw.gender as "M" | "F") || "M";
   const form = useForm<z.infer<typeof profileSchema>>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
-      name: player.name,
-      nickname: player.nickname,
+      name: normalizedName,
+      nickname: normalizedNickname,
       email: player.email ?? "",
-      phone: player.phone ?? "",
+      phone: normalizedPhone,
       birthDate: player.birthDate ?? "",
-      gender: player.gender,
-      club: player.club ?? "",
+      gender: normalizedGender,
+      club: normalizedClub,
     },
   });
   const write = useWrite<Player, unknown>(
@@ -346,9 +353,7 @@ function ProfileForm({ player }: { player: Player }) {
 export function MyPage() {
   const session = useAuth((s) => s.session)!;
   const matches = useList<Match>(`/players/${session.user.userId}/matches`);
-  const tournaments = useList<Tournament>(
-    `/users/${session.user.userId}/tournaments`,
-  );
+  const tournaments = useList<Tournament>("/tournaments");
   return (
     <>
       <div className="page-heading">
