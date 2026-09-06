@@ -13,8 +13,15 @@ import { AdminOnly } from "@/components/common/AdminOnly";
 import { RankingChart } from "@/components/ranking/RankingChart";
 import { date, names } from "@/lib/format";
 import { StatusBadge } from "@/components/common/StatusBadge";
-function normalizePlayer(
-  raw: Partial<Player> & { realName?: string; userName?: string; clubName?: string },
+export function normalizePlayer(
+  raw: Partial<Player> & {
+    realName?: string;
+    userName?: string;
+    clubName?: string;
+    phoneNumber?: string;
+    openRanking?: number;
+    regionRanking?: number;
+  },
 ): Player {
   return {
     ...raw,
@@ -23,6 +30,12 @@ function normalizePlayer(
     nickname: raw.nickname || raw.userName || "",
     club: raw.club || raw.clubName || "",
     gender: raw.gender || "M",
+    phone: raw.phone || raw.phoneNumber || "",
+    birthDate: raw.birthDate || "",
+    openDivision:
+      raw.openDivision || (raw.openRanking ? `${raw.openRanking}부` : ""),
+    localDivision:
+      raw.localDivision || (raw.regionRanking ? `${raw.regionRanking}부` : ""),
     totalMatches: raw.totalMatches ?? 0,
     winRate: raw.winRate ?? 0,
     profileImageUrl: raw.profileImageUrl,
@@ -205,7 +218,13 @@ export function PlayerDetail({ userId }: { userId: string }) {
                 { label: "승률", value: `${stats.data.winRate}%` },
                 {
                   label: "승 / 패",
-                  value: `${stats.data.wins} / ${stats.data.losses}`,
+                  value: `${stats.data.wins} / ${
+                    stats.data.losses ??
+                    Math.max(
+                      0,
+                      (stats.data.totalMatches ?? 0) - (stats.data.wins ?? 0),
+                    )
+                  }`,
                 },
               ].map((s) => (
                 <div className="metric" key={s.label}>
@@ -259,19 +278,41 @@ export function PlayerDetail({ userId }: { userId: string }) {
   );
 }
 export function Rankings() {
-  const [period, setPeriod] = useState("MONTH");
+  const [period, setPeriod] = useState("month");
   const [club, setClub] = useState("");
   const [gender, setGender] = useState("");
   const [ageGroup, setAgeGroup] = useState("");
   const [selected, setSelected] = useState<Ranking | null>(null);
   const debouncedClub = useDebounce(club);
   const rankings = useList<Ranking>(
-    `/rankings${queryString({ period, club: debouncedClub, gender, ageGroup })}`,
+    `/rankings${queryString({ period, club: debouncedClub, gender })}`,
   );
   const history = useApi<PlayerStats>(
-    `/players/${selected?.userId}/stats${queryString({ period })}`,
+    `/players/${selected?.userId}/stats`,
     Boolean(selected),
   );
+  const normalizedRankings = (rankings.data ?? []).map((r, i) => {
+    const p = normalizePlayer(r);
+    const raw = r as unknown as Record<string, unknown>;
+    return {
+      ...p,
+      rank: typeof raw.rank === "number" ? raw.rank : (raw.ranking as number) ?? i + 1,
+      averageScore:
+        typeof raw.averagePoints === "number"
+          ? raw.averagePoints
+          : (raw.averageScore as number) ?? 0,
+    };
+  });
+  const filteredRankings = ageGroup
+    ? normalizedRankings.filter((r) => {
+        if (!r.birthDate) return false;
+        const birthYear = new Date(r.birthDate).getFullYear();
+        if (Number.isNaN(birthYear)) return false;
+        const age = new Date().getFullYear() - birthYear;
+        const group = Math.floor(age / 10) * 10;
+        return group === Number(ageGroup);
+      })
+    : normalizedRankings;
   const rankingColumns: Column<Ranking>[] = [
     {
       key: "rank",
@@ -279,7 +320,11 @@ export function Rankings() {
       render: (p) => <span className={`rank rank-${p.rank}`}>{p.rank}</span>,
     },
     ...columns.filter((c) => c.key !== "detail"),
-    { key: "average", label: "평균 득점", render: (p) => p.averageScore },
+    {
+      key: "average",
+      label: "평균 득점",
+      render: (p) => p.averageScore,
+    },
     {
       key: "chart",
       label: "추이",
@@ -306,10 +351,10 @@ export function Rankings() {
             value={period}
             onChange={(e) => setPeriod(e.target.value)}
           >
-            <option value="MONTH">최근 1개월</option>
-            <option value="QUARTER">최근 3개월</option>
-            <option value="YEAR">최근 1년</option>
-            <option value="ALL">전체 기간</option>
+            <option value="month">최근 1개월</option>
+            <option value="quarter">최근 3개월</option>
+            <option value="year">최근 1년</option>
+            <option value="all">전체 기간</option>
           </select>
           <input
             aria-label="클럽 필터"
@@ -346,21 +391,21 @@ export function Rankings() {
         >
           <DataTable
             columns={rankingColumns}
-            rows={rankings.data ?? []}
+            rows={filteredRankings}
             rowKey={(r) => r.userId}
           />
-          {Boolean(rankings.data?.length) && (
+          {Boolean(filteredRankings.length) && (
             <RankingChart
               period={
                 {
-                  MONTH: "최근 1개월",
-                  QUARTER: "최근 3개월",
-                  YEAR: "최근 1년",
-                  ALL: "전체 기간",
+                  month: "최근 1개월",
+                  quarter: "최근 3개월",
+                  year: "최근 1년",
+                  all: "전체 기간",
                 }[period]
               }
-              data={rankings
-                .data!.slice(0, 10)
+              data={filteredRankings
+                .slice(0, 10)
                 .map((r) => ({ name: r.name, value: r.winRate }))}
             />
           )}

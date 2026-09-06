@@ -5,6 +5,7 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { queryString } from "@/lib/api";
 import type { Player } from "@/lib/types";
 import { QueryState } from "@/components/common/QueryState";
+import { normalizePlayer } from "@/components/screens/Players";
 export function PlayerSelect({
   label,
   value,
@@ -20,6 +21,7 @@ export function PlayerSelect({
   const [keyword, setKeyword] = useState("");
   const search = useDebounce(keyword);
   const players = useList<Player>(`/users${queryString({ keyword: search })}`);
+  const normalizedList = (players.data ?? []).map(normalizePlayer);
   const [known, setKnown] = useState<Record<string, string>>({});
   return (
     <fieldset className="player-select">
@@ -49,11 +51,11 @@ export function PlayerSelect({
       <QueryState
         pending={players.isPending}
         error={players.error}
-        empty={!players.data?.length}
+        empty={!normalizedList.length}
         retry={() => players.refetch()}
       >
         <div className="player-options">
-          {players.data?.map((player) => (
+          {normalizedList.map((player) => (
             <label key={player.userId}>
               <input
                 type="checkbox"
