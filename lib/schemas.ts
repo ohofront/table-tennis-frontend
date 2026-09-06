@@ -85,13 +85,19 @@ export const signupSchema = profileSchema
     message: "비밀번호가 일치하지 않습니다.",
   });
 export const postSchema = z.object({
-  title: z.string().min(1, "제목을 입력해주세요.").max(200),
-  content: z.string().min(1, "내용을 입력해주세요.").max(10000),
+  title: z
+    .string()
+    .min(1, "제목을 입력해주세요.")
+    .max(100, "제목은 100자 이내로 입력해주세요."),
+  content: z
+    .string()
+    .min(1, "내용을 입력해주세요.")
+    .max(500, "내용은 500자 이내로 입력해주세요."),
 });
 export const commentSchema = z.object({
   content: z
     .string()
     .trim()
     .min(1, "댓글을 입력해주세요.")
-    .max(1000, "댓글은 1,000자 이내로 입력해주세요."),
+    .max(500, "댓글은 500자 이내로 입력해주세요."),
 });

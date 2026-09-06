@@ -17,10 +17,78 @@ import { Field, MutationError, applyErrors } from "@/components/common/Forms";
 import { useAuth } from "@/store/auth";
 import { date } from "@/lib/format";
 type Kind = "notices" | "boards";
+
+function normalizePost(raw: unknown): Post {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  return {
+    ...(raw as Post),
+    id: String(
+      r.id ?? r.boardId ?? r.noticeId ?? r.noticeNum ?? (raw as Post)?.id ?? "",
+    ),
+    title:
+      (r.title as string) ||
+      (r.boardTitle as string) ||
+      (r.noticeTitle as string) ||
+      "",
+    content:
+      (r.content as string) ||
+      (r.boardContent as string) ||
+      (r.noticeContents as string) ||
+      "",
+    authorName:
+      (r.authorName as string) ||
+      (r.boardWriter as string) ||
+      (r.noticeWriter as string) ||
+      (r.writer as string) ||
+      "작성자",
+    createdAt:
+      (r.createdAt as string) ||
+      (r.regDate as string) ||
+      (r.reg_date as string) ||
+      new Date().toISOString(),
+    views:
+      typeof r.views === "number"
+        ? r.views
+        : typeof r.viewCount === "number"
+          ? r.viewCount
+          : typeof r.view_count === "number"
+            ? r.view_count
+            : 0,
+  };
+}
+
+function normalizeComment(raw: unknown): Comment {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  return {
+    ...(raw as Comment),
+    commentId: String(r.commentId ?? r.id ?? ""),
+    content: (r.content as string) || (r.commentContent as string) || "",
+    authorName:
+      (r.authorName as string) ||
+      (r.commentWriter as string) ||
+      (r.writer as string) ||
+      (r.userName as string) ||
+      "작성자",
+    createdAt:
+      (r.createdAt as string) ||
+      (r.regDate as string) ||
+      (r.reg_date as string) ||
+      new Date().toISOString(),
+    parentCommentId: r.parentCommentId ? String(r.parentCommentId) : null,
+    comment_depth:
+      typeof r.commentDepth === "number"
+        ? r.commentDepth
+        : typeof r.comment_depth === "number"
+          ? r.comment_depth
+          : 0,
+  };
+}
+
 export function PostList({ kind }: { kind: Kind }) {
   const [keyword, setKeyword] = useState("");
   const search = useDebounce(keyword);
   const posts = useList<Post>(`/${kind}${queryString({ keyword: search })}`);
+  const normalizedPosts = (posts.data ?? []).map((p) => normalizePost(p));
   return (
     <>
       <div className="page-heading">
@@ -56,7 +124,7 @@ export function PostList({ kind }: { kind: Kind }) {
           retry={() => posts.refetch()}
         >
           <DataTable
-            rows={posts.data ?? []}
+            rows={normalizedPosts}
             rowKey={(p) => String(p.id)}
             columns={[
               {
@@ -86,6 +154,7 @@ export function PostDetail({ kind, id }: { kind: Kind; id: string }) {
   const post = useApi<Post>(`/${kind}/${id}`);
   const remove = useWrite<void, undefined>(`/${kind}/${id}`, "DELETE");
   const router = useRouter();
+  const postData = post.data ? normalizePost(post.data) : null;
   return (
     <>
       <Link className="text-link" href={`/${kind}`}>
@@ -96,7 +165,7 @@ export function PostDetail({ kind, id }: { kind: Kind; id: string }) {
         error={post.error}
         retry={() => post.refetch()}
       >
-        {post.data && (
+        {postData && (
           <article className="panel article">
             <div className="row-between">
               <span className="eyebrow">
@@ -129,17 +198,17 @@ export function PostDetail({ kind, id }: { kind: Kind; id: string }) {
                 </div>
               </AdminOnly>
             </div>
-            <h1>{post.data.title}</h1>
+            <h1>{postData.title}</h1>
             <p className="muted">
-              {post.data.authorName} · {date(post.data.createdAt)} · 조회{" "}
-              {post.data.views}
+              {postData.authorName} · {date(postData.createdAt)} · 조회{" "}
+              {postData.views}
             </p>
             <MutationError error={remove.error} />
-            <div className="post-content">{post.data.content}</div>
+            <div className="post-content">{postData.content}</div>
           </article>
         )}
       </QueryState>
-      {kind === "boards" && post.data && <CommentThread boardId={id} />}
+      {kind === "boards" && postData && <CommentThread boardId={id} />}
     </>
   );
 }
@@ -152,18 +221,21 @@ export function PostEditor({ kind, id }: { kind: Kind; id?: string }) {
         error={post.error}
         retry={() => post.refetch()}
       >
-        {post.data && <PostForm kind={kind} post={post.data} />}
+        {post.data && (
+          <PostForm kind={kind} post={normalizePost(post.data)} />
+        )}
       </QueryState>
     );
   return <PostForm kind={kind} />;
 }
 function PostForm({ kind, post }: { kind: Kind; post?: Post }) {
   const router = useRouter();
+  const session = useAuth((s) => s.session);
   const form = useForm<z.infer<typeof postSchema>>({
     resolver: zodResolver(postSchema),
     defaultValues: { title: post?.title ?? "", content: post?.content ?? "" },
   });
-  const write = useWrite<Post, z.infer<typeof postSchema>>(
+  const write = useWrite<Post, unknown>(
     `/${kind}${post ? `/${post.id}` : ""}`,
     post ? "PUT" : "POST",
   );
@@ -178,18 +250,39 @@ function PostForm({ kind, post }: { kind: Kind; post?: Post }) {
         className="panel form-panel"
         onSubmit={form.handleSubmit(async (values) => {
           try {
-            const saved = await write.mutateAsync(values);
-            router.push(saved?.id ? `/${kind}/${saved.id}` : `/${kind}`);
+            const author =
+              session?.user?.name || session?.user?.nickname || "작성자";
+            const payload =
+              kind === "notices"
+                ? {
+                    noticeTitle: values.title,
+                    noticeContents: values.content,
+                    noticeWriter: author,
+                  }
+                : {
+                    boardTitle: values.title,
+                    boardContent: values.content,
+                    boardWriter: author,
+                  };
+            const saved = await write.mutateAsync(payload);
+            const savedRaw = saved as unknown as Record<string, unknown>;
+            const savedId =
+              saved?.id ??
+              (savedRaw?.boardId as string) ??
+              (savedRaw?.noticeId as string) ??
+              (savedRaw?.noticeNum as string) ??
+              post?.id;
+            router.push(savedId ? `/${kind}/${savedId}` : `/${kind}`);
           } catch (e) {
             applyErrors(e, form.setError);
           }
         })}
       >
         <Field label="제목" error={form.formState.errors.title?.message}>
-          <input {...form.register("title")} maxLength={200} />
+          <input {...form.register("title")} maxLength={100} />
         </Field>
         <Field label="내용" error={form.formState.errors.content?.message}>
-          <textarea {...form.register("content")} rows={14} />
+          <textarea {...form.register("content")} rows={14} maxLength={500} />
         </Field>
         <MutationError error={write.error} />
         <div className="actions">
@@ -214,9 +307,9 @@ export function CommentThread({ boardId }: { boardId: string }) {
   });
   const create = useWrite<
     Comment,
-    { content: string; parentCommentId?: string; comment_depth: number }
+    { commentContent: string; commentDepth: number }
   >(`/boards/${boardId}/comments`);
-  const all = comments.data ?? [];
+  const all = (comments.data ?? []).map(normalizeComment);
   const roots = all.filter((c) => !c.parentCommentId);
   return (
     <section className="panel form-panel">
@@ -255,9 +348,8 @@ export function CommentThread({ boardId }: { boardId: string }) {
           onSubmit={form.handleSubmit(async ({ content }) => {
             try {
               await create.mutateAsync({
-                content,
-                parentCommentId: reply?.commentId,
-                comment_depth: reply ? 1 : 0,
+                commentContent: content,
+                commentDepth: reply ? 1 : 0,
               });
               form.reset();
               setReply(null);
@@ -282,7 +374,7 @@ export function CommentThread({ boardId }: { boardId: string }) {
               {...form.register("content")}
               placeholder="서로 존중하는 따뜻한 댓글을 남겨주세요."
               rows={3}
-              maxLength={1000}
+              maxLength={500}
             />
           </Field>
           <MutationError error={create.error} />
