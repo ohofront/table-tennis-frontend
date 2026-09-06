@@ -70,6 +70,9 @@ export async function processLoginResponse(
         phone: (rawUser.phoneNumber as string) || player.phone || "",
         gender: (rawUser.gender as "M" | "F") || player.gender || "M",
         role: player.role || role,
+        totalMatches:
+          typeof rawUser.totalMatches === "number" ? rawUser.totalMatches : 0,
+        winRate: typeof rawUser.winRate === "number" ? rawUser.winRate : 0,
       };
     } catch (err) {
       console.error("사용자 정보 조회 실패:", err);

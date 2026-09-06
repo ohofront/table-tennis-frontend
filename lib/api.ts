@@ -101,6 +101,12 @@ export function refreshSession() {
                 phone: (rawPlayer.phoneNumber as string) || player.phone || "",
                 gender: (rawPlayer.gender as "M" | "F") || player.gender || "M",
                 role: player.role || role,
+                totalMatches:
+                  typeof rawPlayer.totalMatches === "number"
+                    ? rawPlayer.totalMatches
+                    : 0,
+                winRate:
+                  typeof rawPlayer.winRate === "number" ? rawPlayer.winRate : 0,
               };
             } catch {
               user = {
