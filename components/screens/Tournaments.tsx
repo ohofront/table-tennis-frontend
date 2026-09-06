@@ -2,7 +2,14 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useApi, useList } from "@/hooks/useApi";
-import type { Tournament, Player, Group, Match } from "@/lib/types";
+import type {
+  Tournament,
+  Player,
+  Group,
+  Match,
+  MatchFormat,
+  Competition,
+} from "@/lib/types";
 import { QueryState } from "@/components/common/QueryState";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { DataTable } from "@/components/common/DataTable";
@@ -12,7 +19,10 @@ import { queryString } from "@/lib/api";
 import { useDebounce } from "@/hooks/useDebounce";
 export function Tournaments() {
   const [status, setStatus] = useState("");
-  const data = useList<Tournament>(`/tournaments${queryString({ status })}`);
+  const data = useList<Tournament>("/tournaments");
+  const filtered = status
+    ? (data.data ?? []).filter((t) => t.status === status)
+    : (data.data ?? []);
   return (
     <>
       <div className="page-heading">
@@ -38,34 +48,70 @@ export function Tournaments() {
       <QueryState
         pending={data.isPending}
         error={data.error}
-        empty={!data.data?.length}
+        empty={!filtered.length}
         retry={() => data.refetch()}
       >
         <div className="tournament-grid">
-          {data.data?.map((t) => (
-            <Link
-              className="panel tournament-card"
-              href={`/tournaments/${t.year}/${t.tournamentId}`}
-              key={`${t.year}-${t.tournamentId}`}
-            >
-              <StatusBadge status={t.status} />
-              <h2>{t.name}</h2>
-              <p>
-                {date(t.startDate)} ~ {date(t.endDate)}
-              </p>
-              <p>{t.venue}</p>
-              <span className="text-link">대회 상세 →</span>
-            </Link>
-          ))}
+          {filtered.map((t) => {
+            const raw = t as unknown as Record<string, unknown>;
+            const year = t.year || (raw.tournamentYear as number);
+            const id = t.tournamentId || (raw.id as string);
+            const name = t.name || (raw.tournamentName as string);
+            const venue = t.venue || (raw.location as string);
+            return (
+              <Link
+                className="panel tournament-card"
+                href={`/tournaments/${year}/${id}`}
+                key={`${year}-${id}`}
+              >
+                <StatusBadge status={t.status} />
+                <h2>{name}</h2>
+                <p>
+                  {date(t.startDate)} ~ {date(t.endDate)}
+                </p>
+                <p>{venue}</p>
+                <span className="text-link">대회 상세 →</span>
+              </Link>
+            );
+          })}
         </div>
       </QueryState>
     </>
   );
 }
+import { normalizePlayer } from "@/components/screens/Players";
+
 export function TournamentDetail({ year, id }: { year: string; id: string }) {
   const tournament = useApi<Tournament>(`/tournaments/${year}/${id}`);
+  const compList = useList<Competition>(
+    `/tournaments/${year}/${id}/competitions`,
+  );
   const [tab, setTab] = useState("개요");
   const [competition, setCompetition] = useState("");
+  const rawTournament = tournament.data as unknown as Record<string, unknown>;
+  const tournamentName =
+    tournament.data?.name || (rawTournament?.tournamentName as string) || "";
+  const tournamentVenue =
+    tournament.data?.venue || (rawTournament?.location as string) || "";
+  const availableCompetitions =
+    tournament.data?.competitions?.length
+      ? tournament.data.competitions
+      : compList.data?.length
+        ? compList.data.map((c) => {
+            const raw = c as unknown as Record<string, unknown>;
+            return {
+              ...c,
+              competitionId: String(c.competitionId ?? raw.id ?? ""),
+              name: c.name || (raw.competitionName as string) || "경기 단계",
+              matchFormat:
+                c.matchFormat || (raw.matchFormat as MatchFormat) || "SINGLES",
+              bestOf: c.bestOf || 5,
+            };
+          })
+        : [];
+  const selectedCompId =
+    competition || availableCompetitions[0]?.competitionId || "";
+
   return (
     <QueryState
       pending={tournament.isPending}
@@ -77,10 +123,10 @@ export function TournamentDetail({ year, id }: { year: string; id: string }) {
           <div className="page-heading">
             <div>
               <p className="eyebrow">TOURNAMENT</p>
-              <h1>{tournament.data.name}</h1>
+              <h1>{tournamentName}</h1>
               <p>
                 {date(tournament.data.startDate)} ~{" "}
-                {date(tournament.data.endDate)} · {tournament.data.venue}
+                {date(tournament.data.endDate)} · {tournamentVenue}
               </p>
             </div>
             <StatusBadge status={tournament.data.status} />
@@ -101,7 +147,10 @@ export function TournamentDetail({ year, id }: { year: string; id: string }) {
             <section className="panel form-panel">
               <h2>대회 안내</h2>
               <p className="post-content">
-                {tournament.data.description || "등록된 대회 안내가 없습니다."}
+                {tournament.data.description ||
+                  (rawTournament?.eventInfo as string) ||
+                  (rawTournament?.notes as string) ||
+                  "등록된 대회 안내가 없습니다."}
               </p>
             </section>
           )}
@@ -112,26 +161,19 @@ export function TournamentDetail({ year, id }: { year: string; id: string }) {
                 <label htmlFor="competition-select">경기 단계 선택</label>
                 <select
                   id="competition-select"
-                  value={
-                    competition ||
-                    tournament.data.competitions?.[0]?.competitionId ||
-                    ""
-                  }
+                  value={selectedCompId}
                   onChange={(e) => setCompetition(e.target.value)}
                 >
-                  {tournament.data.competitions?.map((c) => (
+                  {availableCompetitions.map((c) => (
                     <option key={c.competitionId} value={c.competitionId}>
                       {c.name}
                     </option>
                   ))}
                 </select>
               </div>
-              {competition ||
-              tournament.data.competitions?.[0]?.competitionId ? (
+              {selectedCompId ? (
                 <CompetitionView
-                  id={
-                    competition || tournament.data.competitions[0].competitionId
-                  }
+                  id={selectedCompId}
                   bracket={tab !== "조편성"}
                 />
               ) : (
@@ -150,6 +192,7 @@ function Participants({ year, id }: { year: string; id: string }) {
   const players = useList<Player>(
     `/tournaments/${year}/${id}/participants${queryString({ keyword: search })}`,
   );
+  const normalizedPlayers = (players.data ?? []).map(normalizePlayer);
   return (
     <section className="panel">
       <div className="filters">
@@ -166,7 +209,7 @@ function Participants({ year, id }: { year: string; id: string }) {
         retry={() => players.refetch()}
       >
         <DataTable
-          rows={players.data ?? []}
+          rows={normalizedPlayers}
           rowKey={(p) => p.userId}
           columns={[
             {
@@ -215,21 +258,27 @@ export function CompetitionView({
       retry={() => groups.refetch()}
     >
       <div className="tournament-grid">
-        {groups.data?.map((g) => (
-          <section className="panel form-panel" key={g.groupId}>
-            <h2>{g.name}</h2>
-            {g.participants.map((p) => (
-              <Link
-                className="match-row"
-                href={`/players/${p.userId}`}
-                key={p.userId}
-              >
-                {p.name}
-                <small>{p.club || "무소속"}</small>
-              </Link>
-            ))}
-          </section>
-        ))}
+        {groups.data?.map((g) => {
+          const rawGroup = g as unknown as Record<string, unknown>;
+          const groupName = g.name || (rawGroup.groupName as string) || "조";
+          const groupId = g.groupId || (rawGroup.id as string) || groupName;
+          const participants = (g.participants ?? []).map(normalizePlayer);
+          return (
+            <section className="panel form-panel" key={groupId}>
+              <h2>{groupName}</h2>
+              {participants.map((p) => (
+                <Link
+                  className="match-row"
+                  href={`/players/${p.userId}`}
+                  key={p.userId}
+                >
+                  {p.name}
+                  <small>{p.club || "무소속"}</small>
+                </Link>
+              ))}
+            </section>
+          );
+        })}
       </div>
     </QueryState>
   );
