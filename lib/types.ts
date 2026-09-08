@@ -164,3 +164,40 @@ export interface TournamentTeamRegistration {
   regDate?: string;
 }
 
+export interface PlayerTitle {
+  userId: number | string;
+  userName?: string;
+  realName?: string;
+  clubName?: string;
+  profileImage?: string;
+  winRate?: number;
+  totalMatches?: number;
+  wins?: number;
+  averagePoints?: number;
+  averageScore?: number;
+}
+
+export interface RankingTitles {
+  winRateKing?: PlayerTitle | null;
+  mostMatchesKing?: PlayerTitle | null;
+  avgScoreKing?: PlayerTitle | null;
+}
+
+export interface PlayerStatsHistoryItem {
+  period?: string;
+  date?: string;
+  yearMonth?: string;
+  winRate?: number;
+  averagePoints?: number;
+  averageScore?: number;
+  totalMatches?: number;
+  wins?: number;
+  losses?: number;
+}
+
+export interface AutoAssignRequest {
+  groupCount: number;
+  seedByRanking: boolean;
+}
+
+

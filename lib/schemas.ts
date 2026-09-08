@@ -124,3 +124,13 @@ export const applyTeamSchema = z.object({
   notes: z.string().max(500, "비고는 500자 이내로 입력해주세요.").optional(),
 });
 
+export const autoAssignSchema = z.object({
+  groupCount: z
+    .number()
+    .int("조 개수는 정수여야 합니다.")
+    .min(1, "조 개수는 1개 이상이어야 합니다.")
+    .max(1000, "조 개수는 1000개 이하여야 합니다."),
+  seedByRanking: z.boolean(),
+});
+
+
