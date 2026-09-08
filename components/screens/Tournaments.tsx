@@ -12,6 +12,8 @@ import type {
 } from "@/lib/types";
 import { QueryState } from "@/components/common/QueryState";
 import { StatusBadge } from "@/components/common/StatusBadge";
+import { RegistrationBadge, CapacityBar } from "@/components/common/RegistrationBadge";
+import { TournamentTeams } from "@/components/screens/TournamentTeams";
 import { DataTable } from "@/components/common/DataTable";
 import { TournamentBracket } from "@/components/match/TournamentBracket";
 import { date } from "@/lib/format";
@@ -64,12 +66,25 @@ export function Tournaments() {
                 href={`/tournaments/${year}/${id}`}
                 key={`${year}-${id}`}
               >
-                <StatusBadge status={t.status} />
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
+                  <StatusBadge status={t.status} />
+                  <RegistrationBadge
+                    registrationStart={t.registrationStart ?? (raw.registrationStart as string)}
+                    registrationEnd={t.registrationEnd ?? (raw.registrationEnd as string)}
+                    isClosed={t.isClosed ?? (raw.isClosed as string)}
+                  />
+                </div>
                 <h2>{name}</h2>
                 <p>
                   {date(t.startDate)} ~ {date(t.endDate)}
                 </p>
                 <p>{venue}</p>
+                {Boolean(t.capacity || raw.capacity) && (
+                  <CapacityBar
+                    current={t.currentParticipants ?? (raw.currentParticipants as number) ?? 0}
+                    capacity={t.capacity ?? (raw.capacity as number)}
+                  />
+                )}
                 <span className="text-link">대회 상세 →</span>
               </Link>
             );
@@ -129,10 +144,27 @@ export function TournamentDetail({ year, id }: { year: string; id: string }) {
                 {date(tournament.data.endDate)} · {tournamentVenue}
               </p>
             </div>
-            <StatusBadge status={tournament.data.status} />
+            <div className="flex flex-col items-end gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <StatusBadge status={tournament.data.status} />
+                <RegistrationBadge
+                  registrationStart={tournament.data.registrationStart ?? (rawTournament?.registrationStart as string)}
+                  registrationEnd={tournament.data.registrationEnd ?? (rawTournament?.registrationEnd as string)}
+                  isClosed={tournament.data.isClosed ?? (rawTournament?.isClosed as string)}
+                />
+              </div>
+              {Boolean(tournament.data.capacity || rawTournament?.capacity) && (
+                <div className="w-48">
+                  <CapacityBar
+                    current={tournament.data.currentParticipants ?? (rawTournament?.currentParticipants as number) ?? 0}
+                    capacity={tournament.data.capacity ?? (rawTournament?.capacity as number)}
+                  />
+                </div>
+              )}
+            </div>
           </div>
           <nav className="tabs" aria-label="대회 상세 메뉴">
-            {["개요", "참가선수", "조편성", "대진표 / 결과"].map((t) => (
+            {["개요", "참가선수", "참가팀", "조편성", "대진표 / 결과"].map((t) => (
               <button
                 className={tab === t ? "active" : ""}
                 aria-pressed={tab === t}
@@ -154,7 +186,8 @@ export function TournamentDetail({ year, id }: { year: string; id: string }) {
               </p>
             </section>
           )}
-          {tab === "참가선수" && <Participants year={year} id={id} />}{" "}
+          {tab === "참가선수" && <Participants year={year} id={id} />}
+          {tab === "참가팀" && <TournamentTeams year={year} id={id} />}
           {(tab === "조편성" || tab === "대진표 / 결과") && (
             <>
               <div className="field">
