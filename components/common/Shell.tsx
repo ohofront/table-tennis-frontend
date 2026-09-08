@@ -10,6 +10,7 @@ import {
   MessagesSquare,
   ArrowUpRight,
   LogOut,
+  Shield,
 } from "lucide-react";
 import { useAuth } from "@/store/auth";
 import { api, json } from "@/lib/api";
@@ -19,6 +20,7 @@ import { useQueryClient } from "@tanstack/react-query";
 const navigation = [
   { href: "/", label: "대시보드", icon: LayoutDashboard },
   { href: "/players", label: "선수 관리", icon: Users },
+  { href: "/teams", label: "팀 관리", icon: Shield },
   { href: "/rankings", label: "통계 · 랭킹", icon: Activity },
   { href: "/tournaments", label: "대회", icon: Trophy },
   { href: "/notices", label: "공지사항", icon: Megaphone },
