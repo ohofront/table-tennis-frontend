@@ -15,6 +15,7 @@ import type { Match, Ranking } from "@/lib/types";
 import { date, names } from "@/lib/format";
 import { QueryState } from "@/components/common/QueryState";
 import { StatusBadge } from "@/components/common/StatusBadge";
+import { TitleCard } from "@/components/ranking/TitleCard";
 import { useAuth } from "@/store/auth";
 import { useEffect, useState } from "react";
 export function Dashboard() {
@@ -111,6 +112,7 @@ export function Dashboard() {
           </div>
         ))}
       </div>
+      <TitleCard />
       <div className="dashboard-grid">
         <section className="panel">
           <div className="panel-heading">

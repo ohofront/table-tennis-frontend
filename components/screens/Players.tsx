@@ -11,6 +11,7 @@ import { DataTable, type Column } from "@/components/common/DataTable";
 import { QueryState } from "@/components/common/QueryState";
 import { AdminOnly } from "@/components/common/AdminOnly";
 import { RankingChart } from "@/components/ranking/RankingChart";
+import { TrendChart } from "@/components/ranking/TrendChart";
 import { date, names } from "@/lib/format";
 import { StatusBadge } from "@/components/common/StatusBadge";
 export function normalizePlayer(
@@ -235,17 +236,7 @@ export function PlayerDetail({ userId }: { userId: string }) {
                 </div>
               ))}
             </div>
-            <section className="panel">
-              <RankingChart
-                line
-                data={
-                  stats.data.history?.map((h) => ({
-                    name: h.date,
-                    value: h.winRate,
-                  })) ?? []
-                }
-              />
-            </section>
+            <TrendChart userId={userId} />
           </>
         )}
       </QueryState>

@@ -16,9 +16,12 @@ import { RegistrationBadge, CapacityBar } from "@/components/common/Registration
 import { TournamentTeams } from "@/components/screens/TournamentTeams";
 import { DataTable } from "@/components/common/DataTable";
 import { TournamentBracket } from "@/components/match/TournamentBracket";
-import { date } from "@/lib/format";
-import { queryString } from "@/lib/api";
+import { Modal } from "@/components/common/Modal";
+import { Shuffle } from "lucide-react";
+import { api, json, queryString } from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
 import { useDebounce } from "@/hooks/useDebounce";
+import { date } from "@/lib/format";
 export function Tournaments() {
   const [status, setStatus] = useState("");
   const data = useList<Tournament>("/tournaments");
@@ -268,8 +271,36 @@ export function CompetitionView({
   id: string;
   bracket?: boolean;
 }) {
+  const queryClient = useQueryClient();
   const groups = useList<Group>(`/competitions/${id}/groups`, !bracket);
   const matches = useList<Match>(`/competitions/${id}/matches`, bracket);
+
+  const [groupCount, setGroupCount] = useState(4);
+  const [seedByRanking, setSeedByRanking] = useState(true);
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  async function executeAutoAssign() {
+    setIsConfirmModalOpen(false);
+    setError("");
+    setSuccess("");
+    setIsSubmitting(true);
+    try {
+      await api(
+        `/competitions/${id}/groups/auto-assign`,
+        json("POST", { groupCount, seedByRanking })
+      );
+      setSuccess("자동 조편성이 성공적으로 완료되었습니다.");
+      queryClient.invalidateQueries({ queryKey: [`/competitions/${id}/groups`] });
+    } catch (err) {
+      setError((err as Error).message || "자동 조편성에 실패했습니다.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   if (bracket)
     return (
       <section className="panel">
@@ -283,36 +314,128 @@ export function CompetitionView({
         </QueryState>
       </section>
     );
+
+  const existingGroups = groups.data ?? [];
+
   return (
-    <QueryState
-      pending={groups.isPending}
-      error={groups.error}
-      empty={!groups.data?.length}
-      retry={() => groups.refetch()}
-    >
-      <div className="tournament-grid">
-        {groups.data?.map((g) => {
-          const rawGroup = g as unknown as Record<string, unknown>;
-          const groupName = g.name || (rawGroup.groupName as string) || "조";
-          const groupId = g.groupId || (rawGroup.id as string) || groupName;
-          const participants = (g.participants ?? []).map(normalizePlayer);
-          return (
-            <section className="panel form-panel" key={groupId}>
-              <h2>{groupName}</h2>
-              {participants.map((p) => (
-                <Link
-                  className="match-row"
-                  href={`/players/${p.userId}`}
-                  key={p.userId}
-                >
-                  {p.name}
-                  <small>{p.club || "무소속"}</small>
-                </Link>
+    <>
+      <div className="flex justify-between items-center mb-4 flex-wrap gap-3 p-4 bg-stone-50 rounded-lg border border-stone-200">
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            <label htmlFor="group-count-select" className="text-sm font-semibold text-stone-700">
+              조 개수
+            </label>
+            <select
+              id="group-count-select"
+              value={groupCount}
+              onChange={(e) => setGroupCount(Number(e.target.value))}
+              className="py-1 px-2 text-sm w-24"
+              disabled={isSubmitting}
+            >
+              {[2, 3, 4, 5, 6, 8, 10, 12, 16].map((n) => (
+                <option key={n} value={n}>
+                  {n}개 조
+                </option>
               ))}
-            </section>
-          );
-        })}
+            </select>
+          </div>
+
+          <label className="flex items-center gap-1.5 text-sm font-medium text-stone-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={seedByRanking}
+              onChange={(e) => setSeedByRanking(e.target.checked)}
+              disabled={isSubmitting}
+              className="rounded"
+            />
+            랭킹 기준 시드 배정
+          </label>
+        </div>
+
+        <button
+          type="button"
+          className="button primary small flex items-center gap-1.5"
+          onClick={() => {
+            if (existingGroups.length > 0) {
+              setIsConfirmModalOpen(true);
+            } else {
+              executeAutoAssign();
+            }
+          }}
+          disabled={isSubmitting}
+        >
+          <Shuffle size={14} />
+          {isSubmitting ? "조편성 중..." : "자동 조편성 실행"}
+        </button>
       </div>
-    </QueryState>
+
+      {error && <p className="error mb-4">{error}</p>}
+      {success && <p className="success mb-4 text-emerald-700 bg-emerald-50 p-3 rounded">{success}</p>}
+
+      <QueryState
+        pending={groups.isPending}
+        error={groups.error}
+        empty={!existingGroups.length}
+        retry={() => groups.refetch()}
+      >
+        <div className="tournament-grid">
+          {existingGroups.map((g) => {
+            const rawGroup = g as unknown as Record<string, unknown>;
+            const groupName = g.name || (rawGroup.groupName as string) || "조";
+            const groupId = g.groupId || (rawGroup.id as string) || groupName;
+            const participants = (g.participants ?? []).map(normalizePlayer);
+            return (
+              <section className="panel form-panel" key={groupId}>
+                <h2>{groupName}</h2>
+                {participants.length === 0 ? (
+                  <p className="text-stone-400 text-xs py-2">배정된 선수가 없습니다.</p>
+                ) : (
+                  participants.map((p) => (
+                    <Link
+                      className="match-row"
+                      href={`/players/${p.userId}`}
+                      key={p.userId}
+                    >
+                      {p.name}
+                      <small>{p.club || "무소속"}</small>
+                    </Link>
+                  ))
+                )}
+              </section>
+            );
+          })}
+        </div>
+      </QueryState>
+
+      {isConfirmModalOpen && (
+        <Modal titleId="confirm-auto-assign-title" onClose={() => setIsConfirmModalOpen(false)}>
+          <div className="p-6">
+            <h2 id="confirm-auto-assign-title" className="text-xl font-bold mb-2">
+              기존 조편성 덮어쓰기 확인
+            </h2>
+            <p className="text-sm text-stone-600 mb-6">
+              기존에 등록된 조편성({existingGroups.length}개 조)이 존재합니다.<br />
+              자동 조편성을 실행하면 기존 조편성이 모두 덮어써집니다. 계속 진행하시겠습니까?
+            </p>
+            <div className="flex justify-end gap-2 pt-4 border-t border-stone-200">
+              <button
+                type="button"
+                className="button secondary"
+                onClick={() => setIsConfirmModalOpen(false)}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                className="button primary bg-rose-600 hover:bg-rose-700 text-white"
+                onClick={executeAutoAssign}
+              >
+                덮어쓰고 실행
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </>
   );
 }
