@@ -97,9 +97,70 @@ export interface Tournament {
   status: Status;
   description?: string;
   competitions: Competition[];
+  capacity?: number;
+  registrationStart?: string;
+  registrationEnd?: string;
+  isClosed?: "Y" | "N" | string;
+  currentParticipants?: number;
 }
 export interface Group {
   groupId: string;
   name: string;
   participants: Player[];
 }
+
+export type TeamType = "CLUB" | "COMPANY" | "PUBLIC";
+
+export interface TeamMember {
+  userId: number | string;
+  name?: string;
+  realName?: string;
+  nickname?: string;
+  role?: "CAPTAIN" | "MEMBER" | string;
+  isCaptain?: boolean;
+  joinedAt?: string;
+  regDate?: string;
+}
+
+export interface Team {
+  teamId?: number | string;
+  id?: number | string;
+  teamName?: string;
+  name?: string;
+  teamType?: TeamType;
+  type?: TeamType;
+  description?: string;
+  logoImage?: string;
+  captainId?: number | string;
+  captainUserId?: number | string;
+  captainName?: string;
+  captain?: {
+    userId: number | string;
+    realName?: string;
+    userName?: string;
+    name?: string;
+  };
+  memberCount?: number;
+  members?: TeamMember[];
+  tournaments?: { tournamentName?: string; name?: string; status?: string }[];
+  regDate?: string;
+  createdAt?: string;
+}
+
+export type RegistrationStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+export interface TournamentTeamRegistration {
+  registrationId?: number | string;
+  id?: number | string;
+  teamId: number | string;
+  teamName?: string;
+  teamType?: TeamType;
+  captainName?: string;
+  rosterUserIds?: (number | string)[];
+  rosterMembers?: { userId: number | string; name?: string; realName?: string }[];
+  status: RegistrationStatus;
+  notes?: string;
+  registeredAt?: string;
+  regDate?: string;
+}
+

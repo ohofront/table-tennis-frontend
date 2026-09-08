@@ -101,3 +101,26 @@ export const commentSchema = z.object({
     .min(1, "댓글을 입력해주세요.")
     .max(500, "댓글은 500자 이내로 입력해주세요."),
 });
+
+export const teamSchema = z.object({
+  teamName: z
+    .string()
+    .trim()
+    .min(1, "팀 이름을 입력해주세요.")
+    .max(50, "팀 이름은 50자 이내로 입력해주세요."),
+  teamType: z.enum(["CLUB", "COMPANY", "PUBLIC"]),
+  description: z
+    .string()
+    .max(500, "팀 소개는 500자 이내로 입력해주세요.")
+    .optional(),
+  logoImage: z.string().optional(),
+});
+
+export const applyTeamSchema = z.object({
+  teamId: z.number().int().positive("참가할 팀을 선택해주세요."),
+  rosterUserIds: z
+    .array(z.number().int())
+    .min(1, "출전 선수를 최소 1명 이상 선택해주세요."),
+  notes: z.string().max(500, "비고는 500자 이내로 입력해주세요.").optional(),
+});
+
