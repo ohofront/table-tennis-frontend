@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Edit3, Shield, UserCheck, UserMinus, UserPlus } from "lucide-react";
+import { ArrowLeft, Calendar, ChevronRight, Edit3, Shield, UserCheck, UserMinus, UserPlus } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useApi, useList } from "@/hooks/useApi";
 import { api, json, queryString } from "@/lib/api";
@@ -110,23 +110,51 @@ export function TeamDetail({ teamId }: { teamId: string }) {
               <h1>{teamName}</h1>
               <p>팀장: <strong className="text-stone-900">{captainName}</strong></p>
             </div>
-            <CaptainOnly captainUserId={captainUserId}>
-              <button
-                type="button"
-                className="button secondary flex items-center gap-1.5"
-                onClick={() => {
-                  setActionError("");
-                  setActionSuccess("");
-                  setIsEditModalOpen(true);
-                }}
+            <div className="flex items-center gap-2 flex-wrap">
+              <Link
+                href={`/teams/${teamId}/schedule`}
+                className="button primary flex items-center gap-1.5"
               >
-                <Edit3 size={15} /> 팀 정보 수정
-              </button>
-            </CaptainOnly>
+                <Calendar size={15} /> 일정 보기
+              </Link>
+              <CaptainOnly captainUserId={captainUserId}>
+                <button
+                  type="button"
+                  className="button secondary flex items-center gap-1.5"
+                  onClick={() => {
+                    setActionError("");
+                    setActionSuccess("");
+                    setIsEditModalOpen(true);
+                  }}
+                >
+                  <Edit3 size={15} /> 팀 정보 수정
+                </button>
+              </CaptainOnly>
+            </div>
           </div>
 
           {actionError && <p className="error mb-4">{actionError}</p>}
           {actionSuccess && <p className="success mb-4 text-emerald-700 bg-emerald-50 p-3 rounded">{actionSuccess}</p>}
+
+          <section className="panel mb-6 flex items-center justify-between flex-wrap gap-4 bg-emerald-50/50 border border-emerald-200/70 p-5 rounded-xl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+                <Calendar size={20} />
+              </div>
+              <div>
+                <h3 className="font-bold text-stone-900 text-base">팀 모임 일정 및 참석 관리</h3>
+                <p className="text-sm text-stone-600">
+                  정기 연습 및 경기 일정을 확인하고 본인의 참석 여부(참석/불참/미정)를 체크하세요.
+                </p>
+              </div>
+            </div>
+            <Link
+              href={`/teams/${teamId}/schedule`}
+              className="button primary small flex items-center gap-1"
+            >
+              일정 확인 및 참석 체크 <ChevronRight size={14} />
+            </Link>
+          </section>
 
           {team.description && (
             <section className="panel form-panel mb-6">
