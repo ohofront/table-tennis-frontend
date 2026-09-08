@@ -200,4 +200,28 @@ export interface AutoAssignRequest {
   seedByRanking: boolean;
 }
 
+export type AttendanceStatus = "ATTEND" | "ABSENT" | "UNDECIDED";
 
+export interface AttendanceItem {
+  userId: number | string;
+  status: AttendanceStatus;
+  respondedAt?: string;
+}
+
+export interface Schedule {
+  scheduleId: number | string;
+  teamId: number | string;
+  title: string;
+  scheduleDate: string; // YYYY-MM-DD
+  startTime: string; // e.g. 19:00:00 or 19:00
+  location?: string;
+  createdBy?: number | string;
+  createdAt?: string;
+}
+
+export interface ScheduleRequest {
+  title: string;
+  scheduleDate: string;
+  startTime: string;
+  location?: string;
+}

@@ -133,4 +133,31 @@ export const autoAssignSchema = z.object({
   seedByRanking: z.boolean(),
 });
 
+export const scheduleSchema = z.object({
+  title: z
+    .string()
+    .trim()
+    .min(1, "일정 제목을 입력해주세요.")
+    .max(100, "제목은 100자 이하로 입력해주세요."),
+  scheduleDate: z
+    .string()
+    .trim()
+    .min(1, "날짜를 선택해주세요.")
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "올바른 날짜 형식(YYYY-MM-DD)을 입력해주세요."),
+  startTime: z
+    .string()
+    .trim()
+    .min(1, "시작 시간을 입력해주세요."),
+  location: z
+    .string()
+    .trim()
+    .max(100, "장소는 100자 이하로 입력해주세요.")
+    .optional()
+    .or(z.literal("")),
+});
 
+export const attendanceResponseSchema = z.object({
+  status: z.enum(["ATTEND", "ABSENT", "UNDECIDED"], {
+    errorMap: () => ({ message: "올바른 참석 상태를 선택해주세요." }),
+  }),
+});
